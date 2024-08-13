@@ -4,6 +4,9 @@ author: "Shazmin"
 date: "2024-08-12"
 output: html_document
 runtime: shiny
+editor_options: 
+  markdown: 
+    wrap: sentence
 ---
 
 ```{r setup, include=FALSE}
@@ -12,15 +15,22 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## **Introduction**
 
-Hey! Here is my Third project of SQL series "Churn Prediction Analysis".Today I will go into more deeper and get my hands dirty as much possible. Get ready for a rollercoaster ride through your dataset, as we reveal the mysteries of why customers leave, and use our data science superpowers to predict who might be next. Buckle up, because we're about to transform a sea of numbers into actionable insights!
+Hey!
+Here is my Third project of SQL series "Churn Prediction Analysis".Today I will go into more deeper and get my hands dirty as much possible.
+Get ready for a rollercoaster ride through your dataset, as we reveal the mysteries of why customers leave, and use our data science superpowers to predict who might be next.
+Buckle up, because we're about to transform a sea of numbers into actionable insights!
 
 ## **Dataset Overview**
 
-Our dataset, customer_churn, is a treasure trove of customer interactions and service usage metrics. It includes essential columns such as MonthlyCharges, tenure, and TotalCharges, which provide insights into how much customers are spending, how long they've stayed, and their total expenditure over time. The dataset also includes a churn indicator—our golden ticket to understanding customer retention. With this data, we’ll explore patterns, identify trends, and build models to predict which customers are likely to churn, all while giving those numbers a story to tell.You can get the Dataset through this link https://www.kaggle.com/datasets/blastchar/telco-customer-churn.
+Our dataset, customer_churn, is a treasure trove of customer interactions and service usage metrics.
+It includes essential columns such as MonthlyCharges, tenure, and TotalCharges, which provide insights into how much customers are spending, how long they've stayed, and their total expenditure over time.
+The dataset also includes a churn indicator—our golden ticket to understanding customer retention.
+With this data, we’ll explore patterns, identify trends, and build models to predict which customers are likely to churn, all while giving those numbers a story to tell.You can get the Dataset through this link <https://www.kaggle.com/datasets/blastchar/telco-customer-churn>.
 
 ## **Load Required Libraries**
 
 Install and load the necessary R libraries for data manipulation and visualization:
+
 ```{r}
 library(dplyr)
 library(ggplot2)
@@ -31,13 +41,14 @@ library(cluster)
 ## **Load Your Data into R**
 
 Load the CSV files you exported into R:
+
 ```{r}
-customer <- read_csv("D:/PROJECTS/SQLProject/Churn-Prediction/Telco-Customer-Churn.csv")
-customer_churn <- read_csv("D:/PROJECTS/SQLProject/Churn-Prediction/Telco-Customer-Churn.csv")
+customer <- read_csv("D:/PROJECTS/SQLProject/Churn-Prediction/Data/Telco-Customer-Churn.csv")
+customer_churn <- read_csv("D:/PROJECTS/SQLProject/Churn-Prediction/Data/Telco-Customer-Churn.csv")
 
 ```
 
-## **Data Exploration and Preparation**
+## **1.Data Exploration and Preparation**
 
 ### Retrieve Basic Information
 
@@ -46,9 +57,11 @@ customer_churn <- read_csv("D:/PROJECTS/SQLProject/Churn-Prediction/Telco-Custom
 ```{r}
 summary(customer_churn)
 ```
+
 This is the beauty of summary() function On the other hand in Postgresql how much CTE's we used to get these result :)
 
 #### 2.Advanced Statistical Summaries:
+
 ```{r}
 customer_churn %>%
   group_by(Churn) %>%
@@ -60,6 +73,7 @@ customer_churn %>%
 ```{r}
 ggplot(customer_churn, aes(x = Churn, y = MonthlyCharges)) + geom_boxplot() + ggtitle("Monthly Charges by Churn")
 ```
+
 ```{r}
 ggplot(customer_churn, aes(x = TotalCharges, fill = Churn)) + geom_histogram(bins = 30, alpha = 0.7) + ggtitle("Total Charges Distribution by Churn")
 ```
@@ -84,13 +98,16 @@ correlation_matrix <- cor(customer_combined)
 print(correlation_matrix)
 
 ```
+
 Here first we have Converted categorical variable 'Churn' into dummy variables.model.matrix() creates dummy variables for Churn, where each level of the factor becomes a new column.Then we handled the missing values in 'TotalCharges' by imputing median.We see the strong correlation between Total charges and monthly charges, Tenure and Total charges.
 
 #### 2.Regression Analysis:
 
 ##### *What is Logistic Regression?*
 
-Logistic Regression is a statistical method used for binary classification problems. It models the probability of a binary outcome based on one or more predictor variables. Unlike linear regression, which predicts continuous values, logistic regression predicts the probability of the target variable belonging to a particular class.
+Logistic Regression is a statistical method used for binary classification problems.
+It models the probability of a binary outcome based on one or more predictor variables.
+Unlike linear regression, which predicts continuous values, logistic regression predicts the probability of the target variable belonging to a particular class.
 
 ##### *When to Use Logistic Regression*
 
@@ -104,11 +121,14 @@ model <- glm(Churn ~ MonthlyCharges + tenure + TotalCharges, data = customer_chu
 summary(model)
 
 ```
- **MonthlyCharges** and **tenure** have significant effects on the outcome, with higher monthly charges increasing the odds and longer tenure decreasing the odds of the event. **TotalCharges** has a minimal and less significant effect on the outcome.
+
+**MonthlyCharges** and **tenure** have significant effects on the outcome, with higher monthly charges increasing the odds and longer tenure decreasing the odds of the event.
+**TotalCharges** has a minimal and less significant effect on the outcome.
 
 ### Service Usage Overview
 
 #### 1.Visualize Differences:
+
 ```{r}
 # Density Plot
 ggplot(customer_churn, aes(x = MonthlyCharges, color = Churn)) + geom_density() + ggtitle("Density Plot of Monthly Charges by Churn")
@@ -116,6 +136,7 @@ ggplot(customer_churn, aes(x = MonthlyCharges, color = Churn)) + geom_density() 
 # Boxplot for Tenure
 ggplot(customer_churn, aes(x = Churn, y = tenure)) + geom_boxplot() + ggtitle("Tenure by Churn Status")
 ```
+
 ## **2. Data Cleaning and Feature Engineering**
 
 ### **Identify and Handle Missing Values**
@@ -126,14 +147,17 @@ ggplot(customer_churn, aes(x = Churn, y = tenure)) + geom_boxplot() + ggtitle("T
 colSums(is.na(customer))
 
 ```
+
 We have only 11 missing values for Total charges which we handled above by Imputing median.But we can use other advance method as well.let's see
 
 #### 2.Advance Imputation:
 
-**MICE (Multivariate Imputation by Chained Equations)**is a method used to handle missing data in a dataset. Here's how it works in simple terms:
-- ***Imputation Process***: It creates multiple versions of your dataset (called "imputations") by filling in missing values using statistical methods.
-- ***Methods Used***: For each missing value, MICE predicts the value based on other variables in the dataset. In this case, 'pmm' (Predictive Mean Matching) is used to estimate missing values.
+**MICE (Multivariate Imputation by Chained Equations)**is a method used to handle missing data in a dataset.
+Here's how it works in simple terms: - ***Imputation Process***: It creates multiple versions of your dataset (called "imputations") by filling in missing values using statistical methods.
+- ***Methods Used***: For each missing value, MICE predicts the value based on other variables in the dataset.
+In this case, 'pmm' (Predictive Mean Matching) is used to estimate missing values.
 - ***Combine Results***: After generating multiple completed datasets, MICE combines them to provide a final dataset where missing values have been filled in
+
 ```{r}
 library(mice)
 imputed_data <- mice(customer_churn, m = 5, method = 'pmm', seed = 123)
@@ -142,17 +166,21 @@ completed_data <- complete(imputed_data)
 ```
 
 ### **Create Derived Features**
+
 #### 1.Example Feature Engineering:
+
 ```{r}
 customer_churn <- customer_churn %>%
   mutate(TotalCharges_per_MonthlyCharges = TotalCharges / MonthlyCharges)
 
 ```
 
-
 ## **3. Exploratory Data Analysis (EDA)**
+
 ### **Analyze Churn by Customer Segments**
+
 #### 1.Clustering:
+
 ```{r}
 
 set.seed(123)
@@ -163,6 +191,7 @@ ggplot(customer_churn, aes(x = MonthlyCharges, y = tenure, color = as.factor(clu
 
 
 ```
+
 #### 2.Advanced Visualizations:
 
 ```{r}
@@ -170,20 +199,20 @@ library(GGally)
 ggpairs(customer_churn, columns = c("MonthlyCharges", "tenure", "TotalCharges", "Churn"))
 
 ```
+
 ### **Correlation Analysis**
 
 #### 1.Principal Component Analysis (PCA) in Correlation Analysis:
 
-**What is PCA?**
-PCA (Principal Component Analysis) is a statistical technique used to simplify and reduce the complexity of data while retaining most of its variability.
+**What is PCA?** PCA (Principal Component Analysis) is a statistical technique used to simplify and reduce the complexity of data while retaining most of its variability.
 It transforms the original correlated variables into a new set of uncorrelated variables called principal components.
 These components are ordered so that the first few capture the most variation in the data.
 
 **Why Use PCA?**
 
--> To identify patterns in the data.
--> To reduce dimensionality (i.e., fewer variables) while preserving as much information as possible.
--> To visualize high-dimensional data in a lower-dimensional space.
+-\> To identify patterns in the data.
+-\> To reduce dimensionality (i.e., fewer variables) while preserving as much information as possible.
+-\> To visualize high-dimensional data in a lower-dimensional space.
 
 ```{r}
 library(FactoMineR)
@@ -192,13 +221,16 @@ plot(pca_result, choix = "var")
 
 
 ```
-Variables that are close together in the plot are more correlated i.e Total Charges and tenure, while variables that are far apart are less correlated.Look at the direction and length of the vectors (arrows) in the plot. Longer vectors indicate variables with higher contributions to the principal components.
+
+Variables that are close together in the plot are more correlated i.e Total Charges and tenure, while variables that are far apart are less correlated.Look at the direction and length of the vectors (arrows) in the plot.
+Longer vectors indicate variables with higher contributions to the principal components.
 
 #### 2.Factor Analysis:
 
 **What is Factor Analysis?**
 
-Factor Analysis is a statistical technique used to identify underlying relationships between variables. It groups variables that are correlated into factors, which represent a set of underlying dimensions or constructs.
+Factor Analysis is a statistical technique used to identify underlying relationships between variables.
+It groups variables that are correlated into factors, which represent a set of underlying dimensions or constructs.
 This helps in reducing the number of variables by summarizing them into fewer factors, making data analysis easier and more interpretable.
 
 ```{r}
@@ -207,6 +239,7 @@ fa_result <- fa(customer_churn %>% select(MonthlyCharges, tenure, TotalCharges),
 print(fa_result)
 
 ```
+
 ## **4. Model Building**
 
 ### **Prepare Data for Modeling**
@@ -228,7 +261,6 @@ sum(is.na(train_data))
 train_data <- na.omit(train_data)
 
 ```
-
 
 ### **Feature Selection**
 
@@ -253,6 +285,7 @@ summary(model_logistic)
 ```
 
 #### 2.Random Forest:
+
 ```{r}
 train_data$Churn <- as.factor(train_data$Churn)
 model_rf <- randomForest(Churn ~ MonthlyCharges + tenure + TotalCharges, data = train_data)
@@ -260,6 +293,7 @@ print(model_rf)
 ```
 
 #### 3.Gradient Boosting:
+
 ```{r}
 train_data <- train_data %>%
   mutate_if(is.character, as.factor) %>%
@@ -286,6 +320,7 @@ plot(roc_result_logistic)
 auc(roc_result_logistic)
 
 ```
+
 ```{r}
 pred_probs_rf <- predict(model_rf, test_data, type = "prob")[, "Yes"]
 roc_result_rf <- roc(test_data$Churn, pred_probs_rf)
@@ -293,6 +328,7 @@ plot(roc_result_rf, main = "ROC Curve for Random Forest")
 auc(roc_result_rf)
 
 ```
+
 ```{r}
 test_data_numeric <- test_data %>%
   mutate_if(is.character, as.factor) %>% 
@@ -307,7 +343,6 @@ plot(roc_result_xgb, main = "ROC Curve for Gradient Boosting")
 auc(roc_result_xgb)
 
 ```
-
 
 #### 2.Precision-Recall Curves:
 
@@ -339,15 +374,17 @@ plot(prroc_result)
 ```
 
 ## **5. Visualization and Reporting**
+
 ### **Visualize Churn Patterns**
 
 #### 1.Plot:
+
 ```{r}
 ggplot(customer_churn, aes(x = MonthlyCharges, fill = Churn)) + geom_histogram(binwidth = 10) + ggtitle("Churn Patterns in Monthly Charges")
 
 ```
-#### 2.Dashboards:
 
+#### 2.Dashboards:
 
 ```{r}
 library(shiny)
@@ -388,7 +425,7 @@ shinyApp(ui = ui, server = server)
 
 ```
 
-### Dashboard 2:
+#### 3.Prediction: 
 
 ```{r}
 # Define UI for application
@@ -455,4 +492,3 @@ predictions_df <- data.frame(
 
 head(predictions_df)
 ```
-
