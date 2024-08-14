@@ -1,0 +1,485 @@
+---
+title: "Market-Basket-Analysis"
+author: "Shazmin"
+date: "2024-08-14"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Welcome to the thrilling world of data visualization, where we transform mundane numbers into dazzling charts and graphs! Today, we’re diving into the depths of our **incredibly exciting** dataset, the Online Retail dataset from Kaggle. You know, that dataset that’s packed with such riveting details as invoice numbers, stock codes, and quantities. You can get the dataset from [Kaggle](https://www.kaggle.com/datasets/vijayuv/onlineretail).
+
+Here’s the deal: We’ll be taking this data and turning it into visual masterpieces that’ll make you question why you ever thought raw data was anything but a visual feast. From heatmaps that could make your eyes bleed from their intensity, to scatter plots that boldly display the riveting relationship between transaction sizes and revenue — it’s all here.
+
+## Dataset Overview
+
+So, what’s in store? Our dataset features columns that describe every tiny detail of your purchasing history. We’ve got invoices, stock codes, descriptions — basically, everything you could ever dream of to make a data analyst’s heart race.
+
+Prepare yourself for a rollercoaster ride through the world of data visualization. Hold onto your seats — or at least your coffee — as we embark on this data-driven adventure!
+
+# a. Visualizing Transaction Patterns
+
+## Heatmaps and Time Series Plots
+
+### Heatmaps
+
+Heatmaps visualize data density or intensity over a grid using color gradients. They’re ideal for showing trends in transaction volume or revenue over time.
+
+```{r}
+# Load required libraries
+library(plotly)
+library(dplyr)
+library(reshape2)
+library(lubridate) 
+
+# Load your data
+data <- read.csv("D:/PROJECTS/SQLProject/Market-Basket-Analysis/data/OnlineRetail.csv")
+
+data$InvoiceDate <- as.POSIXct(data$InvoiceDate, format="%m/%d/%Y %H:%M", tz = "UTC")
+
+# Extract Date, Hour, and Day of Week
+data$Date <- as.Date(data$InvoiceDate)
+data$Hour <- hour(data$InvoiceDate)
+data$DayOfWeek <- weekdays(data$Date)
+
+
+
+```
+
+### Heatmap of Average Transaction Size by Day of Week and Hour
+```{r}
+# Calculate average transaction size
+data_summary <- data %>%
+  filter(Quantity > 0) %>%
+  group_by(DayOfWeek, Hour) %>%
+  summarize(AverageTransactionSize = mean(Quantity), .groups = 'drop')
+
+# Reshape data for heatmap
+data_heatmap <- dcast(data_summary, Hour ~ DayOfWeek, value.var = "AverageTransactionSize", fill = 0)
+
+# Convert the data for plotly
+data_heatmap_long <- melt(data_heatmap, id.vars = "Hour")
+
+# Plot interactive heatmap using plotly
+plot_ly(data_heatmap_long, x = ~variable, y = ~Hour, z = ~value, type = "heatmap",
+        colors = c("lightblue", "darkblue"),
+        colorbar = list(title = "Average Transaction Size")) %>%
+  layout(title = "Heatmap of Average Transaction Size by Day of Week and Hour",
+         xaxis = list(title = "Day of Week"),
+         yaxis = list(title = "Hour of Day"),
+         coloraxis = list(colorbar = list(title = "Average Transaction Size"))) %>%
+  config(displayModeBar = TRUE)
+```
+
+### Heatmap of Revenue by Day of Week and Hour
+
+```{r}
+# Aggregation to calculate revenue by day of week and hour
+data_summary <- data %>%
+  filter(Quantity > 0) %>%
+  group_by(DayOfWeek, Hour) %>%
+  summarize(Revenue = sum(UnitPrice * Quantity), .groups = 'drop')
+
+# Reshape data for heatmap
+data_heatmap <- dcast(data_summary, Hour ~ DayOfWeek, value.var = "Revenue", fill = 0)
+
+# Convert the data for plotly
+data_heatmap_long <- melt(data_heatmap, id.vars = "Hour")
+
+# Plot interactive heatmap using plotly
+plot_ly(data_heatmap_long, x = ~variable, y = ~Hour, z = ~value, type = "heatmap",
+        colors = c("white", "steelblue"),
+        colorbar = list(title = "Revenue")) %>%
+  layout(title = "Heatmap of Revenue by Day of Week and Hour",
+         xaxis = list(title = "Day of Week"),
+         yaxis = list(title = "Hour of Day"),
+         coloraxis = list(colorbar = list(title = "Revenue"))) %>%
+  config(displayModeBar = TRUE)
+
+```
+
+### Time Series Plots
+
+Time series plots help track changes over time, revealing trends in transaction volume and revenue.
+
+```{r}
+# Time series plot of total revenue over time
+data_time_series <- data %>%
+  group_by(Date = as.Date(InvoiceDate)) %>%
+  summarize(Revenue = sum(UnitPrice * Quantity), .groups = 'drop')
+
+ggplot(data_time_series, aes(x = Date, y = Revenue)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Revenue Over Time",
+       x = "Date",
+       y = "Revenue")
+```
+
+
+### 1. **Aggregating the Data**
+
+Since your data has multiple items per invoice, you can aggregate it to find insights like total revenue per invoice, total quantity sold, etc. Here are a few ways you might aggregate the data:
+
+- **Total Revenue per Invoice:** Multiply `Quantity` by `UnitPrice` and sum it for each `InvoiceNo`.
+- **Total Quantity per Invoice:** Sum the `Quantity` for each `InvoiceNo`.
+- **Average Revenue per Customer:** Calculate the average revenue for each `CustomerID`.
+```{r}
+head(data)
+
+# 2. Handle missing values
+# Remove rows with any missing values (You can choose to impute instead)
+data <- data %>%
+  na.omit()
+
+# 3. Remove negative quantities
+data <- data %>%
+  filter(Quantity > 0 )
+
+# Check the first few rows to ensure the parsing is correct
+head(data)
+
+# Inspect the cleaned data
+summary(data)
+```
+
+
+### 2. **Visualizing the Aggregated Data**
+
+#### a) **Total Revenue per Invoice**
+
+```{r}
+set.seed(123) 
+sample_data <- data %>% sample_n(240000)
+# Calculate total revenue per invoice
+data_aggregated <- sample_data %>%
+  group_by(InvoiceNo) %>%
+  summarize(TotalRevenue = sum(Quantity * UnitPrice))%>%
+  filter(TotalRevenue > 0)
+
+print(min(data_aggregated$TotalRevenue))
+# Plot histogram of total revenue per invoice
+ggplot(data_aggregated, aes(x = TotalRevenue)) +
+  geom_histogram(bins = 3000, fill = "blue", color = "black") +
+  coord_cartesian(xlim = c(-10, 2000), ylim = c(-10, 5000)) +
+  theme_minimal() +
+  labs(title = "Histogram of Total Revenue per Invoice",
+       x = "Total Revenue",
+       y = "Frequency")
+```
+
+#### b) **Total Quantity per Invoice**
+
+```{r}
+# Calculate total quantity per invoice
+data_aggregated <- sample_data %>%
+  group_by(InvoiceNo) %>%
+  summarize(TotalQuantity = sum(Quantity))
+
+# Plot histogram of total quantity per invoice
+ggplot(data_aggregated, aes(x = TotalQuantity)) +
+  geom_histogram(bins = 1000, fill = "green", color = "black") +
+  theme_minimal() +
+  labs(title = "Histogram of Total Quantity per Invoice",
+       x = "Total Quantity",
+       y = "Frequency") +
+  coord_cartesian(xlim = c(-10, 2000))
+```
+
+
+#### c) **Average Revenue per Customer**
+
+```{r}
+# Calculate average revenue per customer
+data_aggregated <- sample_data %>%
+  group_by(CustomerID) %>%
+  summarize(AverageRevenue = mean(Quantity * UnitPrice))
+
+# Plot histogram of average revenue per customer
+ggplot(data_aggregated, aes(x = AverageRevenue)) +
+  geom_histogram(bins = 5000, fill = "orange", color = "black") +
+  theme_minimal() +
+  labs(title = "Histogram of Average Revenue per Customer",
+       x = "Average Revenue",
+       y = "Frequency")+
+  coord_cartesian(xlim = c(-10, 200))
+```
+Yes, the tasks related to association rule mining can be performed in R. Here’s how you can approach each step of the process in R:
+
+### **3. Association Rule Mining Preparation**
+
+#### **a. Transaction Data Preparation**
+
+1. **Transform Transaction Data**
+
+   **Transaction-Item Matrix**
+
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(arules)
+head(data)
+
+ # Filter out transactions with non-positive quantities
+transaction_data <- data %>%
+  filter(Quantity > 0)
+
+# Aggregate items by InvoiceNo
+aggregated_data <- transaction_data %>%
+  group_by(InvoiceNo) %>%
+  summarize(items = paste(StockCode, collapse = ",")) %>%
+  ungroup()
+
+# Split items into a list
+split_items <- strsplit(aggregated_data$items, ",")
+
+# Create a transactions object
+basket_data <- as(split_items, "transactions")
+
+# Check the summary of the transactions data
+summary(basket_data)
+
+# Generate association rules with specified support and confidence
+rules <- apriori(basket_data, parameter = list(support = 0.01, confidence = 0.5))
+
+# Inspect the rules
+inspect(rules)
+
+```
+
+   **Frequency Distribution of Itemsets**
+
+```{r}
+library(arules)
+
+# Convert to transaction format
+transactions <- as(split(aggregated_data$items, aggregated_data$InvoiceNo), "transactions")
+
+# Generate itemsets of various lengths
+itemsets_1 <- eclat(transactions, parameter = list(support = 0.01, maxlen = 1))
+itemsets_2 <- eclat(transactions, parameter = list(support = 0.01, maxlen = 2))
+itemsets_3 <- eclat(transactions, parameter = list(support = 0.01, maxlen = 3))
+
+# Summary of itemsets
+summary(itemsets_1)
+summary(itemsets_2)
+summary(itemsets_3)
+
+```
+ 
+
+   **Handle Data Quality Issues**
+```{r}
+# Check for missing values or inconsistencies
+sum(is.na(transaction_data$StockCode))
+sum(transaction_data$Quantity < 0)  # If negative quantities exist
+
+# Remove or correct inconsistencies
+transaction_data_clean <- transaction_data %>%
+  filter(Quantity > 0) %>%
+  drop_na()
+
+```
+
+
+#### **b. Rule Generation**
+
+1. **Frequent Itemsets**
+
+```{r}
+# Generate frequent itemsets
+frequent_itemsets <- apriori(transactions, parameter = list(support = 0.01, target = "frequent itemsets"))
+
+# Inspect frequent itemsets
+inspect(frequent_itemsets)
+
+```
+
+2. **Association Rules**
+
+```{r}
+# Generate rules
+rules <- apriori(transactions, parameter = list(support = 0.01, confidence = 0.5, target = "rules"))
+
+# Top rules by various metrics
+top_rules_support <- head(sort(rules, by = "support"), 10)
+top_rules_confidence <- head(sort(rules, by = "confidence"), 10)
+top_rules_lift <- head(sort(rules, by = "lift"), 10)
+
+# Inspect top rules
+inspect(top_rules_support)
+inspect(top_rules_confidence)
+inspect(top_rules_lift)
+
+```
+
+
+3. **Impact of Threshold Values**
+
+```{r}
+# Adjust thresholds
+rules_10 <- apriori(transactions, parameter = list(support = 0.1, confidence = 0.5, target = "rules"))
+rules_05 <- apriori(transactions, parameter = list(support = 0.05, confidence = 0.5, target = "rules"))
+
+# Summary of rules with adjusted thresholds
+summary(rules_10)
+summary(rules_05)
+
+```
+
+
+#### **c. Rule Evaluation**
+
+1. **Calculate Support, Confidence, and Lift**
+
+```{r}
+# Extract rule metrics
+rule_metrics <- data.frame(
+  support = quality(rules)$support,
+  confidence = quality(rules)$confidence,
+  lift = quality(rules)$lift
+)
+
+# Find rules with the highest lift
+highest_lift_rules <- rules[order(-quality(rules)$lift)]
+inspect(head(highest_lift_rules, 10))
+
+```
+
+
+2. **Alignment with Business Objectives**
+
+```{r}
+# Review top rules and align with business goals
+top_rules_business <- head(sort(rules, by = "lift"), 10)
+inspect(top_rules_business)
+
+```
+
+
+3. **Identify Unexpected Rules**
+
+```{r}
+# Identify and interpret unexpected rules
+unexpected_rules <- rules[quality(rules)$lift < 1]  # Example condition
+inspect(unexpected_rules)
+
+```
+
+
+
+#### Matrix Plots
+
+
+```{r}
+# Load necessary libraries
+library(arules)
+library(arulesViz)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+
+
+# Data cleaning and transformation
+transaction_data <- data %>%
+  filter(Quantity > 0) %>%
+  select(InvoiceNo, StockCode)  # Select relevant columns
+
+# Aggregate transaction data
+aggregated_data <- transaction_data %>%
+  group_by(InvoiceNo) %>%
+  summarize(items = paste(StockCode, collapse = ",")) %>%
+  ungroup()
+
+# Convert to transactions format
+split_items <- strsplit(aggregated_data$items, ",")
+transactions <- as(split_items, "transactions")
+
+# Generate association rules with adjusted parameters
+rules <- apriori(transactions, parameter = list(support = 0.01, confidence = 0.5, maxlen = 5))
+
+# Check the number of rules
+cat("Number of rules generated:", length(rules), "\n")
+
+# Plot the rules if there are any
+if (length(rules) > 0) {
+  # Save the plot to a PNG file with increased size
+  png("rules_plot.png", width = 1200, height = 1200, res = 150)
+  plot(rules, method = "matrix", control = list(reorder = "measure"))
+  dev.off()
+
+  # Alternatively, plot interactively
+  library(plotly)
+  plotly::plot_ly(data = as(rules, "data.frame"), x = ~support, y = ~confidence, color = ~lift, type = 'scatter', mode = 'markers')
+  
+} else {
+  message("No rules to plot.")
+}
+
+# Additional code to inspect and analyze rules
+if (length(rules) > 0) {
+  # Inspect the top rules by support
+  top_rules_support <- head(sort(rules, by = "support"), 10)
+  cat("Top rules by support:\n")
+  inspect(top_rules_support)
+  
+  # Inspect the top rules by confidence
+  top_rules_confidence <- head(sort(rules, by = "confidence"), 10)
+  cat("Top rules by confidence:\n")
+  inspect(top_rules_confidence)
+  
+  # Inspect the top rules by lift
+  top_rules_lift <- head(sort(rules, by = "lift"), 10)
+  cat("Top rules by lift:\n")
+  inspect(top_rules_lift)
+}
+
+# Optionally: Save rules to a CSV file
+write(rules, file = "rules.csv", sep = ",")
+
+```
+
+
+
+
+
+# d. Comparative Analysis
+
+### Product Performance Comparison
+
+
+```{r}
+# Aggregate data for comparative analysis
+product_performance <- sample_data %>%
+  group_by(StockCode) %>%
+  summarize(Revenue = sum(UnitPrice * Quantity), .groups = 'drop')
+
+# Comparative bar chart
+ggplot(product_performance, aes(x = reorder(StockCode, -Revenue), y = Revenue, fill = StockCode)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Comparison of Product Performance",
+       x = "Product",
+       y = "Revenue") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+# Conclusion
+
+This report summarizes advanced data visualizations for understanding market basket patterns and customer behavior. Each visualization technique provides insights into different aspects of the data, helping to uncover trends and relationships.
+
+
+### **Additional Resources**
+
+- **ggplot2**: For creating static visualizations. [ggplot2 documentation](https://ggplot2.tidyverse.org/)
+- **igraph**: For network graphs. [igraph documentation](https://igraph.org/r/)
+- **shiny**: For interactive dashboards. [shiny documentation](
+
