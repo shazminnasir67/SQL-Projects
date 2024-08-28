@@ -1,0 +1,278 @@
+---
+title: "Sales Forecasting"
+author: "Shazmin"
+date: "2024-08-11"
+output: html_document
+---
+
+
+## **1. Introduction**
+
+In this analysis, we aim to forecast sales trends based on historical data from retail transactions. Accurate sales forecasting is essential for optimizing inventory management, planning marketing strategies, and improving overall business performance. This report uses time series analysis to predict future sales trends, visualize historical data, and assess forecasting accuracy.A complete detailed sales forecasting is done in Postgresql for which you can refer to my repository.
+
+## **2. Setting Up the Environment**
+
+Before diving into the data analysis, we need to ensure that all necessary R packages are installed and loaded. These packages will help us with data manipulation, visualization, and forecasting.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+install.packages(c("ggplot2", "dplyr", "readr", "lubridate", "forecast","zoo"))
+
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(lubridate)
+library(forecast)
+library(zoo)
+```
+### **Dataset Overview**
+
+The dataset used for this analysis is the Retail Transactions Dataset whch you can freely download from my repository or from kaggle, includes transactional data from a retail business. This dataset provides insights into sales performance across various cities and customer categories. Understanding this dataset is crucial for performing accurate sales forecasting and analyzing business performance.
+
+#### *Key Features:*
+
+->Transaction_ID: A unique identifier for each transaction, allowing us to distinguish individual sales records.
+
+->Date: The date on which the transaction occurred. This is crucial for time series analysis, as it helps in aggregating sales data by month.
+
+->Total_Items: The total number of items purchased in each transaction. This helps in understanding the volume of sales.
+
+->Total_Cost: The total amount of money spent in each transaction. This is the primary variable used to calculate total sales and analyze spending patterns.
+
+->Discount_Applied: A boolean indicator of whether a discount was applied to the transaction. This can provide insights into the impact of discounts on sales.
+
+->Customer_Name: The name of the customer who made the purchase. While it may not be used directly in the analysis, it can be helpful for customer segmentation and profiling.
+
+->Product: The type of product purchased. This helps in analyzing sales performance across different product categories.
+
+->Payment_Method: The method used for payment (e.g., credit card, cash). This can provide insights into payment preferences and trends.
+
+->City: The city where the transaction took place. This is important for analyzing regional sales performance.
+
+->Store_Type: The type of store where the transaction occurred (e.g., online, physical). This helps in understanding the performance of different store formats.
+
+->Customer_Category: The category of the customer (e.g., regular, new). This can help in analyzing spending behavior by customer type.
+
+->Season: The season during which the transaction took place. This is useful for identifying seasonal trends in sales.
+
+->Promotion: Any promotions that were active during the transaction. This helps in evaluating the impact of promotions on sales.
+
+## **3. Loading and Preparing Data**
+
+We'll start by loading the sales data and preparing it for analysis. This includes converting date formats and creating necessary time components.
+
+```{r}
+# Load data from CSV
+sales_data <- read_csv("C:/Users/HOME/Downloads/Retail_Transactions_Dataset/Retail_Transactions_Dataset.csv")
+```
+Ensure your `Date` column is in the correct date format and extract necessary components.
+
+```{r}
+# Convert Date to Date type and create year-month column
+sales_data <- sales_data %>%
+  mutate(Date = as.Date(Date, format="%Y-%m-%d"),
+         Year = year(Date),
+         Month = month(Date),
+         YearMonth = as.yearmon(Date))
+```
+
+## **4. Data Visualization**
+
+Visualizing data helps uncover patterns and insights. Here, we will create several visualizations to better understand sales trends and distributions.
+
+#### a. **Monthly Sales Trends**
+
+Visualize the trend of total sales over time to identify any seasonal patterns or long-term trends.
+
+
+```{r}
+monthly_sales <- sales_data %>%
+  group_by(YearMonth) %>%
+  summarise(Total_Sales = sum(Total_Cost, na.rm = TRUE))
+
+ggplot(monthly_sales, aes(x = YearMonth, y = Total_Sales)) +
+  geom_line(color = "blue") +
+  labs(title = "Monthly Sales Trends",
+       x = "Date",
+       y = "Total Sales") +
+  theme_minimal()
+```
+
+#### b. **Sales Distribution by City**
+
+Compare the total sales across different cities to identify key markets.
+
+
+```{r}
+city_sales <- sales_data %>%
+  group_by(City) %>%
+  summarise(Total_Sales = sum(Total_Cost, na.rm = TRUE)) %>%
+  arrange(desc(Total_Sales))
+
+ggplot(city_sales, aes(x = reorder(City, Total_Sales), y = Total_Sales)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Total Sales by City",
+       x = "City",
+       y = "Total Sales") +
+  theme_minimal()
+```
+
+
+#### c. **Sales Trends for High-Performing vs Low-Performing Cities**
+
+Examine sales trends in the cities with the highest and lowest total sales to understand their performance better.
+
+```{r}
+high_city <- city_sales %>% top_n(1, Total_Sales) %>% pull(City)
+low_city <- city_sales %>% top_n(-1, Total_Sales) %>% pull(City)
+
+selected_cities <- sales_data %>%
+  filter(City %in% c(high_city, low_city)) %>%
+  group_by(YearMonth, City) %>%
+  summarise(Total_Sales = sum(Total_Cost, na.rm = TRUE))
+
+
+ggplot(selected_cities, aes(x = YearMonth, y = Total_Sales, color = City)) +
+  geom_line() +
+  labs(title = "Sales Trends for High-Performing vs Low-Performing Cities",
+       x = "Date",
+       y = "Total Sales") +
+  theme_minimal()
+```
+
+
+
+#### d. **Average Spending by Customer Category**
+
+Analyze how spending varies by customer category to tailor marketing and sales strategies.
+
+```{r}
+customer_category_metrics <- sales_data %>%
+  group_by(Customer_Category) %>%
+  summarise(Average_Spending = mean(Total_Cost, na.rm = TRUE))
+
+# Average Spending by Customer Category Plot
+ggplot(customer_category_metrics, aes(x = Customer_Category, y = Average_Spending)) +
+  geom_bar(stat = "identity", fill = "coral") +
+  labs(title = "Average Spending by Customer Category",
+       x = "Customer Category",
+       y = "Average Spending") +
+  theme_minimal()
+```
+
+
+### **5. Time Series Forecasting**
+
+#### a. **Prepare Data for Time Series**
+
+Aggregate the sales data by month to prepare it for time series forecasting
+
+```{r}
+# Aggregate sales data by month for time series analysis
+monthly_sales_ts <- sales_data %>%
+  group_by(YearMonth) %>%
+  summarise(Total_Sales = sum(Total_Cost, na.rm = TRUE)) %>%
+  arrange(YearMonth) %>%
+  select(Total_Sales)
+
+
+ts_data <- ts(monthly_sales_ts$Total_Sales, frequency = 12)
+```
+
+
+#### b. **Create Forecasts**
+
+Use the ARIMA model to forecast future sales and visualize the forecasted values.You can study ore about ARIMA at https://otexts.com/fpp2/arima.html
+
+
+```{r}
+# Create time series model
+model <- auto.arima(ts_data)
+
+# Forecast future sales
+forecasted_values <- forecast(model, h = 12)  
+
+# Plot forecast
+autoplot(forecasted_values) +
+  labs(title = "Sales Forecast",
+       x = "Date",
+       y = "Total Sales") +
+  theme_minimal()
+```
+
+
+### **6. Performance Metrics**
+
+Assess the accuracy of your forecasts by comparing them with actual sales data from a test set.
+
+```{r}
+# Check the time series object
+print(ts_data)
+
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(forecast)
+library(ggplot2)
+
+# Load your sales data
+# sales_data <- read.csv("path/to/sales_transactions.csv")
+
+# Convert Date to Date type if it's not already
+sales_data <- sales_data %>%
+  mutate(Date = as.Date(Date, format="%Y-%m-%d"),
+         YearMonth = as.yearmon(Date))
+
+# Aggregate sales data by month
+monthly_sales_ts <- sales_data %>%
+  group_by(YearMonth) %>%
+  summarise(Total_Sales = sum(Total_Cost, na.rm = TRUE)) %>%
+  arrange(YearMonth)
+
+# Ensure the correct time series object is created
+ts_data <- ts(monthly_sales_ts$Total_Sales, frequency = 12, start = c(year(min(monthly_sales_ts$YearMonth)), month(min(monthly_sales_ts$YearMonth))))
+
+# Check ts_data
+print(ts_data)
+# Create time series model
+model <- auto.arima(ts_data)
+
+# Forecast future sales for the next 12 months
+forecasted_values <- forecast(model, h = 12)
+
+# Plot forecast
+autoplot(forecasted_values) +
+  labs(title = "Sales Forecast",
+       x = "Date",
+       y = "Total Sales") +
+  theme_minimal()
+
+# Split data into training and test sets
+train_set <- window(ts_data, end = c(2023, 12))
+test_set <- window(ts_data, start = c(2024, 1))
+
+# Create model on training set
+train_model <- auto.arima(train_set)
+
+# Forecast on the test set period
+test_forecast <- forecast(train_model, h = length(test_set))
+
+# Calculate and print accuracy metrics
+forecast_accuracy <- accuracy(test_forecast, test_set)
+print(forecast_accuracy)
+
+```
+### **7. Conclusion**
+In this analysis, we explored historical sales data to identify trends and forecast future sales. We visualized sales trends over time, compared sales distributions across cities, and analyzed average spending by customer category. Using ARIMA modeling, we generated forecasts for the upcoming year and evaluated their accuracy. These insights are crucial for strategic decision-making, enabling better inventory management and targeted marketing efforts.
+
+

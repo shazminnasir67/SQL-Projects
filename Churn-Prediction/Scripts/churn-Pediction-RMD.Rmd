@@ -1,0 +1,494 @@
+---
+title: "Churn-Prediction"
+author: "Shazmin"
+date: "2024-08-12"
+output: html_document
+runtime: shiny
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## **Introduction**
+
+Hey!
+Here is my Third project of SQL series "Churn Prediction Analysis".Today I will go into more deeper and get my hands dirty as much possible.
+Get ready for a rollercoaster ride through your dataset, as we reveal the mysteries of why customers leave, and use our data science superpowers to predict who might be next.
+Buckle up, because we're about to transform a sea of numbers into actionable insights!
+
+## **Dataset Overview**
+
+Our dataset, customer_churn, is a treasure trove of customer interactions and service usage metrics.
+It includes essential columns such as MonthlyCharges, tenure, and TotalCharges, which provide insights into how much customers are spending, how long they've stayed, and their total expenditure over time.
+The dataset also includes a churn indicator—our golden ticket to understanding customer retention.
+With this data, we’ll explore patterns, identify trends, and build models to predict which customers are likely to churn, all while giving those numbers a story to tell.You can get the Dataset through this link <https://www.kaggle.com/datasets/blastchar/telco-customer-churn>.
+
+## **Load Required Libraries**
+
+Install and load the necessary R libraries for data manipulation and visualization:
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(cluster)
+```
+
+## **Load Your Data into R**
+
+Load the CSV files you exported into R:
+
+```{r}
+customer <- read_csv("D:/PROJECTS/SQLProject/Churn-Prediction/Data/Telco-Customer-Churn.csv")
+customer_churn <- read_csv("D:/PROJECTS/SQLProject/Churn-Prediction/Data/Telco-Customer-Churn.csv")
+
+```
+
+## **1.Data Exploration and Preparation**
+
+### Retrieve Basic Information
+
+#### 1.Basic Summary:
+
+```{r}
+summary(customer_churn)
+```
+
+This is the beauty of summary() function On the other hand in Postgresql how much CTE's we used to get these result :)
+
+#### 2.Advanced Statistical Summaries:
+
+```{r}
+customer_churn %>%
+  group_by(Churn) %>%
+  summarise(across(c(MonthlyCharges, tenure, TotalCharges), list(mean = mean, sd = sd, median = median)))
+```
+
+#### 3.Visualizations:
+
+```{r}
+ggplot(customer_churn, aes(x = Churn, y = MonthlyCharges)) + geom_boxplot() + ggtitle("Monthly Charges by Churn")
+```
+
+```{r}
+ggplot(customer_churn, aes(x = TotalCharges, fill = Churn)) + geom_histogram(bins = 30, alpha = 0.7) + ggtitle("Total Charges Distribution by Churn")
+```
+
+### Examine Customer Demographics:
+
+#### 1.Correlation Analysis:
+
+```{r}
+# Convert Churn to a factor if it's not already
+customer_churn$Churn <- as.factor(customer_churn$Churn)
+
+# Create dummy variables
+customer_dummies <- model.matrix(~ Churn - 1, data = customer_churn)
+
+#Imputing median in place of NA
+customer_churn$TotalCharges[is.na(customer_churn$TotalCharges)] <- median(customer_churn$TotalCharges, na.rm = TRUE)
+customer_combined <- cbind(customer_churn[, c("MonthlyCharges", "tenure", "TotalCharges")], customer_dummies)
+
+# Recalculate the correlation matrix
+correlation_matrix <- cor(customer_combined)
+print(correlation_matrix)
+
+```
+
+Here first we have Converted categorical variable 'Churn' into dummy variables.model.matrix() creates dummy variables for Churn, where each level of the factor becomes a new column.Then we handled the missing values in 'TotalCharges' by imputing median.We see the strong correlation between Total charges and monthly charges, Tenure and Total charges.
+
+#### 2.Regression Analysis:
+
+##### *What is Logistic Regression?*
+
+Logistic Regression is a statistical method used for binary classification problems.
+It models the probability of a binary outcome based on one or more predictor variables.
+Unlike linear regression, which predicts continuous values, logistic regression predicts the probability of the target variable belonging to a particular class.
+
+##### *When to Use Logistic Regression*
+
+*Binary Outcomes*: When your outcome variable is binary (e.g., yes/no, 0/1, churn/no churn).
+*Probability Estimation*: When you need to estimate the probability of a certain event occurring.
+*Classification Problems*: When you want to classify observations into two categories based on predictor variables.
+
+```{r}
+# Logistic Regression
+model <- glm(Churn ~ MonthlyCharges + tenure + TotalCharges, data = customer_churn, family = binomial)
+summary(model)
+
+```
+
+**MonthlyCharges** and **tenure** have significant effects on the outcome, with higher monthly charges increasing the odds and longer tenure decreasing the odds of the event.
+**TotalCharges** has a minimal and less significant effect on the outcome.
+
+### Service Usage Overview
+
+#### 1.Visualize Differences:
+
+```{r}
+# Density Plot
+ggplot(customer_churn, aes(x = MonthlyCharges, color = Churn)) + geom_density() + ggtitle("Density Plot of Monthly Charges by Churn")
+
+# Boxplot for Tenure
+ggplot(customer_churn, aes(x = Churn, y = tenure)) + geom_boxplot() + ggtitle("Tenure by Churn Status")
+```
+
+## **2. Data Cleaning and Feature Engineering**
+
+### **Identify and Handle Missing Values**
+
+#### 1.Identify Missing Values:
+
+```{r}
+colSums(is.na(customer))
+
+```
+
+We have only 11 missing values for Total charges which we handled above by Imputing median.But we can use other advance method as well.let's see
+
+#### 2.Advance Imputation:
+
+**MICE (Multivariate Imputation by Chained Equations)**is a method used to handle missing data in a dataset.
+Here's how it works in simple terms: - ***Imputation Process***: It creates multiple versions of your dataset (called "imputations") by filling in missing values using statistical methods.
+- ***Methods Used***: For each missing value, MICE predicts the value based on other variables in the dataset.
+In this case, 'pmm' (Predictive Mean Matching) is used to estimate missing values.
+- ***Combine Results***: After generating multiple completed datasets, MICE combines them to provide a final dataset where missing values have been filled in
+
+```{r}
+library(mice)
+imputed_data <- mice(customer_churn, m = 5, method = 'pmm', seed = 123)
+completed_data <- complete(imputed_data)
+
+```
+
+### **Create Derived Features**
+
+#### 1.Example Feature Engineering:
+
+```{r}
+customer_churn <- customer_churn %>%
+  mutate(TotalCharges_per_MonthlyCharges = TotalCharges / MonthlyCharges)
+
+```
+
+## **3. Exploratory Data Analysis (EDA)**
+
+### **Analyze Churn by Customer Segments**
+
+#### 1.Clustering:
+
+```{r}
+
+set.seed(123)
+clustering <- kmeans(customer_churn[, c("MonthlyCharges", "tenure", "TotalCharges")], centers = 3)
+customer_churn$cluster <- clustering$cluster
+
+ggplot(customer_churn, aes(x = MonthlyCharges, y = tenure, color = as.factor(cluster))) + geom_point() + ggtitle("Customer Segments")
+
+
+```
+
+#### 2.Advanced Visualizations:
+
+```{r}
+library(GGally)
+ggpairs(customer_churn, columns = c("MonthlyCharges", "tenure", "TotalCharges", "Churn"))
+
+```
+
+### **Correlation Analysis**
+
+#### 1.Principal Component Analysis (PCA) in Correlation Analysis:
+
+**What is PCA?** PCA (Principal Component Analysis) is a statistical technique used to simplify and reduce the complexity of data while retaining most of its variability.
+It transforms the original correlated variables into a new set of uncorrelated variables called principal components.
+These components are ordered so that the first few capture the most variation in the data.
+
+**Why Use PCA?**
+
+-\> To identify patterns in the data.
+-\> To reduce dimensionality (i.e., fewer variables) while preserving as much information as possible.
+-\> To visualize high-dimensional data in a lower-dimensional space.
+
+```{r}
+library(FactoMineR)
+pca_result <- PCA(customer_churn %>% select(MonthlyCharges, tenure, TotalCharges), scale.unit = TRUE)
+plot(pca_result, choix = "var")
+
+
+```
+
+Variables that are close together in the plot are more correlated i.e Total Charges and tenure, while variables that are far apart are less correlated.Look at the direction and length of the vectors (arrows) in the plot.
+Longer vectors indicate variables with higher contributions to the principal components.
+
+#### 2.Factor Analysis:
+
+**What is Factor Analysis?**
+
+Factor Analysis is a statistical technique used to identify underlying relationships between variables.
+It groups variables that are correlated into factors, which represent a set of underlying dimensions or constructs.
+This helps in reducing the number of variables by summarizing them into fewer factors, making data analysis easier and more interpretable.
+
+```{r}
+library(psych)
+fa_result <- fa(customer_churn %>% select(MonthlyCharges, tenure, TotalCharges), nfactors = 2)
+print(fa_result)
+
+```
+
+## **4. Model Building**
+
+### **Prepare Data for Modeling**
+
+#### 1.Split Data:
+
+```{r}
+library(caret)
+set.seed(123)
+train_index <- createDataPartition(customer_churn$Churn, p = 0.7, list = FALSE)
+train_data <- customer_churn[train_index, ]
+test_data <- customer_churn[-train_index, ]
+train_data$Churn <- as.factor(train_data$Churn)
+
+# Check for missing values in train_data
+sum(is.na(train_data))
+
+
+train_data <- na.omit(train_data)
+
+```
+
+### **Feature Selection**
+
+#### 1.Recursive Feature Elimination
+
+```{r}
+library(randomForest)
+control <- rfeControl(functions = rfFuncs, method = "cv", number = 10)
+results <- rfe(train_data %>% select(-Churn), train_data$Churn, sizes = c(1:5), rfeControl = control)
+print(results)
+
+
+```
+
+### **Build Churn Prediction Model**
+
+#### 1.Logistic Regression:
+
+```{r}
+model_logistic <- glm(Churn ~ MonthlyCharges + tenure + TotalCharges, data = train_data, family = binomial)
+summary(model_logistic)
+```
+
+#### 2.Random Forest:
+
+```{r}
+train_data$Churn <- as.factor(train_data$Churn)
+model_rf <- randomForest(Churn ~ MonthlyCharges + tenure + TotalCharges, data = train_data)
+print(model_rf)
+```
+
+#### 3.Gradient Boosting:
+
+```{r}
+train_data <- train_data %>%
+  mutate_if(is.character, as.factor) %>%
+  mutate_if(is.factor, as.numeric)
+
+library(xgboost)
+dtrain <- xgb.DMatrix(data = as.matrix(train_data %>% select(-Churn)), label = as.numeric(train_data$Churn) - 1)
+
+# Train the XGBoost model
+model_xgb <- xgboost(data = dtrain, nrounds = 10, objective = "binary:logistic")
+
+
+```
+
+### **Evaluate Model Performance**
+
+#### 1.ROC-AUC:
+
+```{r}
+library(pROC)
+pred_probs_logistic <- predict(model_logistic, test_data, type = "response")
+roc_result_logistic <- roc(test_data$Churn, pred_probs_logistic)
+plot(roc_result_logistic)
+auc(roc_result_logistic)
+
+```
+
+```{r}
+pred_probs_rf <- predict(model_rf, test_data, type = "prob")[, "Yes"]
+roc_result_rf <- roc(test_data$Churn, pred_probs_rf)
+plot(roc_result_rf, main = "ROC Curve for Random Forest")
+auc(roc_result_rf)
+
+```
+
+```{r}
+test_data_numeric <- test_data %>%
+  mutate_if(is.character, as.factor) %>% 
+  mutate_if(is.factor, as.numeric)
+dtest <- xgb.DMatrix(data = as.matrix(test_data_numeric %>% select(-Churn)))
+pred_probs_xgb <- predict(model_xgb, dtest)
+
+# Evaluate ROC-AUC
+library(pROC)
+roc_result_xgb <- roc(test_data$Churn, pred_probs_xgb)
+plot(roc_result_xgb, main = "ROC Curve for Gradient Boosting")
+auc(roc_result_xgb)
+
+```
+
+#### 2.Precision-Recall Curves:
+
+```{r}
+
+library(PRROC)
+
+# Convert the 'Churn' factor to a numeric vector
+churn_numeric <- as.numeric(test_data$Churn == "Yes")  # 1 for "Yes", 0 for "No"
+
+# Ensure that predictions are numeric vectors
+scores_class0 <- as.numeric(pred_probs_logistic[churn_numeric == 1])
+scores_class1 <- as.numeric(pred_probs_logistic[churn_numeric == 0])
+
+# Check the results
+str(scores_class0)
+str(scores_class1)
+
+# Generate the precision-recall curve
+prroc_result <- pr.curve(scores.class0 = scores_class0, 
+                         scores.class1 = scores_class1, 
+                         curve = TRUE)
+
+# Plot the curve
+plot(prroc_result)
+
+
+
+```
+
+## **5. Visualization and Reporting**
+
+### **Visualize Churn Patterns**
+
+#### 1.Plot:
+
+```{r}
+ggplot(customer_churn, aes(x = MonthlyCharges, fill = Churn)) + geom_histogram(binwidth = 10) + ggtitle("Churn Patterns in Monthly Charges")
+
+```
+
+#### 2.Dashboards:
+
+```{r}
+library(shiny)
+customer_churn$Churn <- as.factor(customer_churn$Churn)
+
+# Define UI
+ui <- fluidPage(
+  titlePanel("Churn Analysis"),
+  sidebarLayout(
+    sidebarPanel(
+      # Input for binwidth
+      sliderInput("binwidth",
+                  "Binwidth for Histogram:",
+                  min = 1,
+                  max = 50,
+                  value = 10)
+    ),
+    mainPanel(
+      plotOutput("churnPlot")
+    )
+  )
+)
+
+# Define server logic
+server <- function(input, output) {
+  output$churnPlot <- renderPlot({
+    ggplot(customer_churn, aes(x = MonthlyCharges, fill = Churn)) +
+      geom_histogram(binwidth = input$binwidth) +
+      labs(title = "Distribution of Monthly Charges by Churn Status",
+           x = "Monthly Charges",
+           y = "Count") +
+      theme_minimal()
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+
+```
+
+#### 3.Prediction: 
+
+```{r}
+# Define UI for application
+ui <- fluidPage(
+  titlePanel("Churn Analysis Dashboard"),
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("probRange", "Select Churn Probability Range:",
+                  min = 0, max = 1, value = c(0, 1), step = 0.01)
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Churn Rate Distribution",
+                 plotOutput("churnRatePlot")),
+        tabPanel("Churn Probability Distribution",
+                 plotOutput("probDistPlot"))
+      )
+    )
+  )
+)
+
+# Define server logic
+server <- function(input, output) {
+  # Load the customer churn data
+  data <- reactive({
+    # Simulate data loading
+    customer_churn %>%
+      mutate(ChurnProbability = predict(model_logistic, newdata = customer_churn, type = "response")) %>%
+      mutate(Churn = as.factor(Churn)) %>%
+      filter(ChurnProbability >= input$probRange[1] & ChurnProbability <= input$probRange[2])
+  })
+  
+  # Churn Rate Distribution Plot
+  output$churnRatePlot <- renderPlot({
+    ggplot(data(), aes(x = Churn)) +
+      geom_bar(fill = "skyblue", color = "black") +
+      labs(title = "Distribution of Churn",
+           x = "Churn",
+           y = "Count") +
+      theme_minimal()
+  })
+  
+  # Churn Probability Distribution Plot
+  output$probDistPlot <- renderPlot({
+    ggplot(data(), aes(x = ChurnProbability)) +
+      geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black") +
+      labs(title = "Distribution of Churn Probabilities",
+           x = "Churn Probability",
+           y = "Frequency") +
+      theme_minimal()
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+```
+
+```{r}
+predictions_df <- data.frame(
+  Actual = test_data$Churn,
+  Predicted_Probabilities = pred_probs_xgb
+)
+
+
+head(predictions_df)
+```
